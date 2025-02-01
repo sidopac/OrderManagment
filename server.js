@@ -1,55 +1,41 @@
-const express = require('express');
-const cors = require('cors');
-const bodyParser = require('body-parser');
-const path = require('path'); // استيراد مكتبة path
+const express = require("express");
+const cors = require("cors");
+const path = require("path");
+const http = require("http");
+const { Server } = require("ws");
 
 const app = express();
-const PORT = 5000;
+const server = http.createServer(app);
+const wss = new Server({ server });
 
-// تفعيل CORS للسماح بالوصول من أجهزة أخرى
 app.use(cors());
+app.use(express.json());
+app.use(express.static(path.join(__dirname, "public")));
 
-// تفعيل Body Parser لاستقبال البيانات بصيغة JSON
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
-
-// 📌 جعل مجلد "public" متاحًا ليتمكن المتصفح من فتح الملفات داخله
-app.use(express.static(path.join(__dirname, 'public')));
-
-// مصفوفة لتخزين الطلبات مؤقتًا
-let orders = [];
-
-// ✅ API: إرسال طلب جديد
-app.post('/api/orders', (req, res) => {
-    const { title, description } = req.body;
-
-    if (!title || !description) {
-        return res.status(400).json({ message: 'يجب إدخال عنوان ووصف الطلب' });
-    }
-
-    const newOrder = {
-        id: orders.length + 1,
-        title,
-        description,
-        status: 'جديد',
-        createdAt: new Date()
-    };
-
-    orders.push(newOrder);
-    res.status(201).json({ message: '✅ تم إرسال الطلب بنجاح', order: newOrder });
+app.get("/", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// ✅ API: الحصول على جميع الطلبات
-app.get('/api/orders', (req, res) => {
-    res.json(orders);
+// استقبال الطلبات عبر WebSocket
+wss.on("connection", (ws) => {
+    console.log("🔗 متصل عبر WebSocket");
+
+    ws.on("message", (message) => {
+        console.log("📩 طلب جديد:", message.toString());
+
+        // إرسال الطلب إلى جميع المتصلين
+        wss.clients.forEach(client => {
+            if (client.readyState === 1) {
+                client.send(message.toString());
+            }
+        });
+    });
+
+    ws.on("close", () => console.log("🚫 تم قطع الاتصال"));
 });
 
-// 📌 أي طلب غير معروف يتم إعادة توجيهه إلى الصفحة الرئيسية (index.html)
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// ✅ تشغيل السيرفر
-app.listen(PORT, () => {
-    console.log(`🚀 السيرفر يعمل على: http://localhost:${PORT}`);
+// تشغيل السيرفر
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => {
+    console.log(`🚀 Server is running on port ${PORT}`);
 });
